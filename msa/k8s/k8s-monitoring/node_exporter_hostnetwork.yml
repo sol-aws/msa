@@ -1,46 +1,111 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: node-exporter
-  namespace: monitoring
+  name: node-exporter     # DaemonSet 이름
+  namespace: monitoring   # monitoring 네임스페이스에 생성
+
 spec:
   selector:
     matchLabels:
-      app: node-exporter
+      app: node-exporter    # app=node-exporter 라벨을 가진 Pod를 이 DaemonSet이 관리
+
   template:
     metadata:
       labels:
-        app: node-exporter
+        app: node-exporter  # 실제 생성되는 Pod에 app=node-exporter 라벨 적용
+
     spec:
+      # Node Exporter는 각 Node의 시스템 정보를 수집해야 하므로
+      # Pod 네트워크가 아니라 실제 Node의 네트워크를 그대로 사용
       hostNetwork: true
+
+      # Node의 PID Namespace를 공유
+      # Node의 프로세스 관련 정보를 확인할 수 있도록 설정
       hostPID: true
+
       containers:
         - name: node-exporter
-          image: prom/node-exporter
+          image: prom/node-exporter     # Prometheus Node Exporter 이미지
+
           args:
+            # Node Exporter가 9100 포트에서 Metrics를 제공
+            # Prometheus는 이 포트의 /metrics로 접속해서 Metrics를 수집
             - "--web.listen-address=:9100"
+
+            # 아래 volumeMounts에서 Node의 /proc를 컨테이너의 /host/proc에 연결한다.
+            # 이 옵션은 Node Exporter에게 "procfs 정보는 기본 /proc가 아니라 /host/proc에서 읽어라" 라고 알려주는 설정
+            #
+            # Node /proc
+            # 1) volumes의 proc
+            # 2) volumeMounts의 /host/proc
+            # 3) Node Exporter가 --path.procfs=/host/proc로 읽음
             - "--path.procfs=/host/proc"
+
+            # Node의 /sys를 컨테이너의 /host/sys에 연결한 뒤
+            # Node Exporter가 /host/sys를 sysfs 경로로 사용하도록 설정
+            #
+            # Node /sys
+            # 1) volumes의 sys
+            # 2) volumeMounts의 /host/sys
+            # 3) Node Exporter가 --path.sysfs=/host/sys로 읽음
             - "--path.sysfs=/host/sys"
+
+            # Node의 / 전체 파일시스템을 컨테이너의 /rootfs에 연결한 뒤
+            # Node Exporter가 /rootfs를 실제 Node의 Root Filesystem으로 사용
+            #
+            # Node /
+            # 1) volumes의 root
+            # 2) volumeMounts의 /rootfs
+            # 3) Node Exporter가 --path.rootfs=/rootfs로 읽음
             - "--path.rootfs=/rootfs"
+
           ports:
+            # Node Exporter가 Metrics를 제공하는 포트
             - containerPort: 9100
+
           volumeMounts:
+            # volumes에서 정의한 proc 볼륨을
+            # 컨테이너 내부 /host/proc에 연결
+            #
+            # 결과: Node의 /proc 내용이 컨테이너의 /host/proc에서 보이게 된다.
             - name: proc
               mountPath: /host/proc
-              readOnly: true
+              readOnly: true            # Node의 /proc를 수정하지 못하도록 읽기 전용
+
+            # volumes에서 정의한 sys 볼륨을
+            # 컨테이너 내부 /host/sys에 연결
+            #
+            # 결과: Node의 /sys 내용이 컨테이너의 /host/sys에서 보이게 된다.
             - name: sys
               mountPath: /host/sys
               readOnly: true
+
+            # volumes에서 정의한 root 볼륨을
+            # 컨테이너 내부 /rootfs에 연결
+            # 결과: Node의 / 파일시스템이 컨테이너의 /rootfs에서 보이게 된다.
             - name: root
               mountPath: /rootfs
               readOnly: true
+
       volumes:
+        # 실제 Kubernetes Node의 /proc 디렉터리를
+        # proc이라는 이름의 볼륨으로 등록
+        # 이 proc이라는 이름은 위의 volumeMounts의
+        # name: proc과 연결된다.
         - name: proc
           hostPath:
             path: /proc
+
+        # 실제 Kubernetes Node의 /sys 디렉터리를
+        # sys라는 이름의 볼륨으로 등록
+        # volumeMounts의 name: sys와 연결된다.
         - name: sys
           hostPath:
             path: /sys
+
+        # 실제 Kubernetes Node의 / 전체 파일시스템을
+        # root라는 이름의 볼륨으로 등록
+        # volumeMounts의 name: root와 연결된다.
         - name: root
           hostPath:
             path: /

@@ -1,15 +1,20 @@
+# monitoring-https.yml
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: monitoring-aws-esk-com-tls
   namespace: monitoring
+
 spec:
   secretName: monitoring-aws-esk-com-tls
-  duration: 2160h      # 90d
-  renewBefore: 360h    # 15d
+
+  duration: 2160h
+  renewBefore: 360h
+
   issuerRef:
     name: my-issuer
     kind: ClusterIssuer
+
   dnsNames:
-  - prometheus.aws-esk.com
-  - grafana.aws-esk.com
+    - prometheus.aws-esk.com
+    - grafana.aws-esk.com
